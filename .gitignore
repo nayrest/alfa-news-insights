@@ -1,0 +1,11 @@
+.env
+.idea
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# данные кейса не коммитим (кроме синтетических примеров)
+data/*.csv
+!data/sample_*.csv
+data/alfa_analytics/*
+!data/alfa_analytics/.gitkeep

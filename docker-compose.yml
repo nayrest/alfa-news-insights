@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-insights}
+      POSTGRES_USER: ${POSTGRES_USER:-insights}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-insights}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-insights} -d ${POSTGRES_DB:-insights}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-insights}:${POSTGRES_PASSWORD:-insights}@db:5432/${POSTGRES_DB:-insights}
+    volumes:
+      - ./data:/app/data:ro
+      # запись разрешена только сюда: сохраняем распознанный OCR-текст рядом с PDF
+      - ./data/alfa_analytics:/app/data/alfa_analytics
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
