@@ -8,10 +8,11 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://insights:insights@localhost:5432/insights"
 
-    llm_base_url: str = ""
+    llm_base_url: str = "https://changellenge.up.railway.app/v1"
+    llm_base_url_fallback: str = "https://api.alfahack-gateway26.ru/v1"
     llm_api_key: str = ""
-    llm_model_fast: str = "gemma-4-26b-a4b"
-    llm_model_smart: str = "glm-5.3-flash"
+    llm_model_fast: str = "google/gemma-4-26b-a4b-it"
+    llm_model_smart: str = "z-ai/glm-5.3-flash"
     llm_daily_token_limit: int = 2_000_000
     llm_timeout_sec: float = 90.0
 

@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -34,6 +35,7 @@ def _cache_key(model: str, messages: list[dict]) -> str:
 
 
 def tokens_used_today(session: Session) -> int:
+    # Бюджет шлюза обновляется в 03:00 МСК = 00:00 UTC — считаем сутки так же
     start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     total = session.scalar(
         select(func.coalesce(func.sum(LLMCall.prompt_tokens + LLMCall.completion_tokens), 0)).where(
@@ -58,7 +60,12 @@ def chat(
     key = _cache_key(model, messages)
 
     if use_cache:
-        cached = session.scalar(select(LLMCall).where(LLMCall.cache_key == key).order_by(LLMCall.id.desc()).limit(1))
+        cached = session.scalar(
+            select(LLMCall)
+            .where(LLMCall.cache_key == key, LLMCall.response != "")
+            .order_by(LLMCall.id.desc())
+            .limit(1)
+        )
         if cached:
             return cached.response
 
@@ -68,27 +75,10 @@ def chat(
         raise LLMBudgetExceeded("Дневной лимит токенов исчерпан (LLM_DAILY_TOKEN_LIMIT)")
 
     body = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
-    last_exc: Exception | None = None
-    for attempt in range(3):
-        try:
-            resp = httpx.post(
-                s.llm_base_url.rstrip("/") + "/chat/completions",
-                headers={"Authorization": f"Bearer {s.llm_api_key}"},
-                json=body,
-                timeout=s.llm_timeout_sec,
-            )
-            if resp.status_code == 429 or resp.status_code >= 500:
-                raise LLMError(f"HTTP {resp.status_code}: {resp.text[:200]}")
-            resp.raise_for_status()
-            data = resp.json()
-            break
-        except (httpx.HTTPError, LLMError, ValueError) as exc:
-            last_exc = exc
-            log.warning("LLM попытка %s не удалась: %s", attempt + 1, exc)
-    else:
-        raise LLMError(f"LLM недоступен: {last_exc}")
+    data = _post_with_fallback(s, body)
 
-    content = data["choices"][0]["message"]["content"] or ""
+    message = (data.get("choices") or [{}])[0].get("message") or {}
+    content = message.get("content") or ""
     usage = data.get("usage") or {}
     session.add(
         LLMCall(
@@ -102,7 +92,47 @@ def chat(
         )
     )
     session.commit()
+    if not content.strip():
+        # Частый случай у «думающих» моделей: весь max_tokens ушёл на рассуждения, ответа нет
+        hint = " (модель потратила лимит на рассуждения — увеличьте max_tokens или возьмите другую модель)" if message.get(
+            "reasoning"
+        ) or message.get("reasoning_content") else ""
+        raise LLMError(f"Пустой ответ от {model}{hint}")
     return content
+
+
+def _post_with_fallback(s, body: dict) -> dict:
+    """Пробует основной адрес шлюза, при сетевых ошибках/5xx/429 — запасной.
+
+    Ошибки 4xx (неверный ключ, неизвестная модель) не повторяем: повтор не поможет.
+    """
+    urls = [u for u in (s.llm_base_url, s.llm_base_url_fallback) if u]
+    last_exc: Exception | None = None
+    for attempt in range(4):
+        url = urls[attempt % len(urls)].rstrip("/") + "/chat/completions"
+        try:
+            resp = httpx.post(
+                url,
+                headers={"Authorization": f"Bearer {s.llm_api_key}"},
+                json=body,
+                timeout=s.llm_timeout_sec,
+            )
+        except httpx.HTTPError as exc:
+            last_exc = exc
+            log.warning("LLM %s недоступен (попытка %s): %s", url, attempt + 1, exc)
+            continue
+        if resp.status_code == 429 or resp.status_code >= 500:
+            last_exc = LLMError(f"HTTP {resp.status_code} от {url}: {resp.text[:300]}")
+            log.warning("%s", last_exc)
+            time.sleep(1.5 * (attempt + 1))
+            continue
+        if resp.status_code >= 400:
+            raise LLMError(f"HTTP {resp.status_code} от {url}: {resp.text[:500]}")
+        try:
+            return resp.json()
+        except ValueError as exc:
+            last_exc = exc
+    raise LLMError(f"LLM недоступен: {last_exc}")
 
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)

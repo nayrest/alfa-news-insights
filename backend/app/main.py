@@ -115,6 +115,68 @@ def admin_analytics_search(q: str, k: int = Query(3, le=10)):
     return get_index().search(q, k=k)
 
 
+ALLOWED_MODELS = [
+    "google/gemma-4-26b-a4b-it",
+    "z-ai/glm-5.3-flash",
+    "qwen/qwen3.6-35b-a3b",
+    "deepseek/deepseek-v4.1-flash",
+    "qwen/qwen3-vl-30b-a3b-instruct",
+    "moonshotai/kimi-k2.6",
+]
+
+
+@app.post("/admin/llm-ping")
+def admin_llm_ping(model: str | None = None, session: Session = Depends(get_session)):
+    """Проверка доступа к LLM: короткий запрос к одной модели (или ко всем, если model не указан).
+
+    Показывает задержку, расход токенов и то, отвечает ли модель JSON без «рассуждений» на весь лимит.
+    Тратит немного бюджета — не вызывайте в цикле.
+    """
+    from app.llm.client import LLMError, chat
+
+    results = []
+    for m in [model] if model else ALLOWED_MODELS:
+        t0 = time.monotonic()
+        try:
+            out = chat(
+                session,
+                [{"role": "user", "content": 'Верни JSON {"ok": true, "lang": "ru"} и ничего больше.'}],
+                model=m,
+                purpose="ping",
+                max_tokens=400,
+                use_cache=False,
+            )
+            results.append({"model": m, "ok": True, "seconds": round(time.monotonic() - t0, 1), "answer": out[:200]})
+        except LLMError as exc:
+            results.append({"model": m, "ok": False, "seconds": round(time.monotonic() - t0, 1), "error": str(exc)[:400]})
+    return {"results": results, "tokens_today": tokens_used_today(session)}
+
+
+@app.get("/admin/llm-usage")
+def admin_llm_usage(session: Session = Depends(get_session)):
+    """Расход токенов за сутки (с 03:00 МСК) по моделям и целям — следим за лимитом 500 ₽."""
+    from datetime import datetime as _dt
+
+    from app.models import LLMCall
+
+    start = _dt.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = session.execute(
+        select(
+            LLMCall.model,
+            LLMCall.purpose,
+            func.count(),
+            func.sum(LLMCall.prompt_tokens),
+            func.sum(LLMCall.completion_tokens),
+        )
+        .where(LLMCall.created_at >= start)
+        .group_by(LLMCall.model, LLMCall.purpose)
+    ).all()
+    return [
+        {"model": m, "purpose": p, "calls": c, "prompt_tokens": int(pt or 0), "completion_tokens": int(ct or 0)}
+        for m, p, c, pt, ct in rows
+    ]
+
+
 @app.get("/roles")
 def roles():
     return ROLES
