@@ -190,6 +190,18 @@ def news_ingest(session: Session = Depends(get_session)):
     return run_ingest(session)
 
 
+@app.post("/admin/reclassify-news")
+def admin_reclassify_news(session: Session = Depends(get_session)):
+    """Пересчитать темы/отрасли/страны у уже сохранённых новостей (после изменения правил классификации)."""
+    from app.news.classify import classify
+
+    rows = list(session.scalars(select(News)))
+    for n in rows:
+        n.tags = classify(n.title, n.summary)
+    session.commit()
+    return {"reclassified": len(rows)}
+
+
 @app.get("/news")
 def news_list(limit: int = Query(50, le=500), session: Session = Depends(get_session)):
     rows = session.scalars(select(News).order_by(News.published_at.desc().nullslast()).limit(limit))

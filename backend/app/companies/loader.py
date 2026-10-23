@@ -28,53 +28,85 @@ def read_csv(path: str) -> pd.DataFrame | None:
     raise ValueError(f"Не удалось прочитать {path}: неизвестная кодировка")
 
 
+def _columns(path: Path) -> set[str]:
+    try:
+        with path.open(encoding="utf-8-sig", errors="ignore") as f:
+            header = f.readline()
+    except OSError:
+        return set()
+    sep = ";" if header.count(";") > header.count(",") else ","
+    return {c.strip().strip('"').upper() for c in header.split(sep)}
+
+
+def _resolve(configured: str, data_dir: str, required: set[str]) -> str | None:
+    """Путь из настроек, если файл есть и подходит по колонкам; иначе ищем подходящий CSV в папке данных."""
+    p = Path(configured)
+    if p.is_file() and required <= _columns(p):
+        return str(p)
+    base = Path(data_dir)
+    if base.is_dir():
+        for candidate in sorted(base.glob("*.csv")):
+            if not candidate.name.startswith("sample_") and required <= _columns(candidate):
+                log.info("Файл %s не найден, использую %s (подходит по колонкам)", configured, candidate.name)
+                return str(candidate)
+    return None
+
+
 def _clean(row: dict) -> dict:
     return {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in row.items()}
 
 
 def load_companies(session: Session) -> dict:
     s = get_settings()
-    companies = read_csv(s.companies_csv)
-    source = s.companies_csv
-    if companies is None:
-        companies = read_csv(s.sample_companies_csv)
-        source = s.sample_companies_csv
+    companies_path = _resolve(s.companies_csv, s.data_dir, {"SYNTHETIC_U", "MAINOKVED_CODE"})
+    using_sample = companies_path is None
+    companies_path = companies_path or s.sample_companies_csv
+    companies = read_csv(companies_path)
     if companies is None:
         return {"loaded": 0, "error": "Нет ни реальных, ни синтетических данных о компаниях"}
 
-    payments = read_csv(s.payments_csv)
-    if payments is None:
-        payments = read_csv(str(Path(s.sample_companies_csv).with_name("sample_payments.csv")))
-    persons = read_csv(s.persons_csv)
-
-    # Защита от путаницы имён файлов в кейсе: файл платежей узнаём по колонкам
-    if persons is not None and {"PAYER", "BENEFICIARY"} <= set(c.upper() for c in persons.columns):
-        payments, persons = persons, None
+    if using_sample:
+        payments_path = str(Path(s.sample_companies_csv).with_name("sample_payments.csv"))
+        persons_path = None
+    else:
+        # Синтетику к реальным компаниям не подмешиваем: ищем настоящие файлы по колонкам,
+        # имена в кейсе путаются (на слайде у физлиц и платежей одно имя).
+        payments_path = _resolve(s.payments_csv, s.data_dir, {"PAYER", "BENEFICIARY"})
+        persons_path = _resolve(s.persons_csv, s.data_dir, {"SYNTHETIC_F", "SYNTHETIC_U"})
+    payments = read_csv(payments_path) if payments_path else None
+    persons = read_csv(persons_path) if persons_path else None
+    source = companies_path
 
     companies = normalize_columns(companies)
     profiles = build_profiles(companies, payments, persons, s.large_business_revenue)
     raw_rows = {str(r["SYNTHETIC_U"]): _clean(r) for r in companies.to_dict(orient="records")}
 
     existing_ids = set(session.scalars(select(Company.id)))
-    for cid, p in profiles.items():
-        # add — быстро для первой загрузки, merge — для обновления уже загруженных
-        (session.merge if cid in existing_ids else session.add)(
-            Company(
-                id=cid,
-                okved_code=p["okved_code"],
-                okved_name=p["okved_name"],
-                region=p["region"],
-                revenue=p["revenue"],
-                group_id=p["group"]["group_id"],
-                raw=raw_rows.get(cid, {}),
-                profile=p,
-            )
-        )
+    rows = [
+        {
+            "id": cid,
+            "okved_code": p["okved_code"],
+            "okved_name": p["okved_name"],
+            "region": p["region"],
+            "revenue": p["revenue"],
+            "group_id": p["group"]["group_id"],
+            "raw": raw_rows.get(cid, {}),
+            "profile": p,
+        }
+        for cid, p in profiles.items()
+    ]
+    # Пакетная вставка/обновление: 85 тыс. строк по одной через merge заняли бы минуты
+    new_rows = [r for r in rows if r["id"] not in existing_ids]
+    old_rows = [r for r in rows if r["id"] in existing_ids]
+    for i in range(0, len(new_rows), 5000):
+        session.bulk_insert_mappings(Company, new_rows[i : i + 5000])
+    for i in range(0, len(old_rows), 5000):
+        session.bulk_update_mappings(Company, old_rows[i : i + 5000])
     session.commit()
     log.info("Загружено компаний: %s из %s", len(profiles), source)
     return {
         "loaded": len(profiles),
         "source": source,
-        "with_payments": payments is not None,
-        "with_persons": persons is not None,
+        "payments": payments_path,
+        "persons": persons_path,
     }

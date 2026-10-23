@@ -93,3 +93,17 @@ def test_analytics_search():
     assert idx.search("ключевая ставка")[0]["id"] == "A1"
     assert idx.search("золото")[0]["id"] == "A2"
     assert len(split_chunks("абзац один\n\n" + "длинный текст. " * 200, max_chars=300)) > 3
+
+
+def test_split_countries_and_interests():
+    from app.companies.profile import split_countries
+
+    assert split_countries("ОАЭ,Алжир, индия") == ["ОАЭ", "АЛЖИР", "ИНДИЯ"]
+    assert split_countries(None) == []
+    companies = pd.read_csv(DATA / "sample_companies.csv", dtype=str)
+    companies.loc[companies.SYNTHETIC_U == "DEMO_U_001", "FTS_COUNTRY_NAME"] = "КИТАЙ,ИНДИЯ"
+    p = build_profiles(companies)["DEMO_U_001"]
+    keys = {i["key"] for i in p["interests"]}
+    assert {"country:КИТАЙ", "country:ИНДИЯ"} <= keys
+    title = "Индия снизила пошлины на импорт"
+    assert score_news(classify(title), title, None, p["interests"])["is_relevant"]

@@ -15,10 +15,13 @@ class Settings(BaseSettings):
     llm_model_smart: str = "z-ai/glm-5.3-flash"
     llm_daily_token_limit: int = 2_000_000
     llm_timeout_sec: float = 90.0
+    # «Думающие» модели (GLM, DeepSeek, Kimi) тратят часть лимита на скрытые рассуждения — даём запас
+    llm_max_tokens_draft: int = 5000
 
     companies_csv: str = "/app/data/df_Uid_data_hack.csv"
     persons_csv: str = "/app/data/df_Fid_Uid_link_hack.csv"
-    payments_csv: str = "/app/data/payments.csv"
+    payments_csv: str = "/app/data/df_Uid_payment_hack.csv"
+    data_dir: str = "/app/data"
     sample_companies_csv: str = "/app/data/sample_companies.csv"
     alfa_analytics_dir: str = "/app/data/alfa_analytics"
 

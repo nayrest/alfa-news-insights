@@ -28,7 +28,6 @@ CSV кейса ──► профиль компании (признаки, до
 | Самопроверка | `app/agent/validate.py` | У каждого факта и вывода должна быть ссылка на реальный источник или признак |
 | Инструменты | `app/agent/tools.py` | Белый список, только чтение, журнал вызовов |
 | LLM | `app/llm/client.py` | OpenAI-совместимый API, кэш, журнал, защита дневного лимита |
-| Интерфейс | `frontend/` | Главная Альфа-Бизнеса с виджетом инсайтов, лента, карточка события, трасса, вопросы |
 
 ## Запуск
 
@@ -40,7 +39,6 @@ cp .env.example .env          # заполнить LLM_BASE_URL и LLM_API_KEY
 docker compose up --build
 ```
 
-Интерфейс (Альфа-Бизнес с точкой входа в сервис): http://localhost:3000. Подробнее — в `frontend/README.md`.
 API: http://localhost:8000, Swagger: http://localhost:8000/docs
 
 ### Данные
@@ -49,10 +47,11 @@ API: http://localhost:8000, Swagger: http://localhost:8000/docs
 |---|---|---|
 | Компании `df_Uid_data_hack.csv` | `data/` | `COMPANIES_CSV` |
 | Физлица | `data/` | `PERSONS_CSV` |
-| Платежи | `data/payments.csv` | `PAYMENTS_CSV` |
+| Платежи `df_Uid_payment_hack.csv` | `data/` | `PAYMENTS_CSV` |
 | Аналитика Альфа-Банка (pdf/txt/md) | `data/alfa_analytics/` | `ALFA_ANALYTICS_DIR` |
 
-Если реальных файлов нет, используются `data/sample_companies.csv` и `data/sample_payments.csv`
+Если файл не найден по указанному пути, бэкенд ищет в `data/` CSV с нужными колонками (имена файлов в кейсе путаются).
+Если реальных файлов нет совсем, используются `data/sample_companies.csv` и `data/sample_payments.csv`
 (синтетические данные для end-to-end проверки).
 После замены данных: `POST /admin/load-companies` и `POST /admin/reload-analytics`.
 

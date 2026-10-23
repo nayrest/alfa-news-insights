@@ -27,3 +27,16 @@ def test_hallucinated_sources_are_caught():
 def test_schema_violation():
     payload, issues = check_payload({"headline": "x"}, {"N1"}, set(), set())
     assert payload is None and issues
+
+
+def test_inline_refs_are_stripped():
+    from app.agent.runner import strip_inline_refs
+
+    d = strip_inline_refs(
+        {
+            "headline": "Кредиты (loans) не подешевеют [B1].",
+            "ai_inference": [{"id": "I1", "text": "Риск для ВЭД (ОАЭ, Индия) [B1, fts].", "based_on": ["B1"]}],
+        }
+    )
+    assert d["headline"] == "Кредиты не подешевеют."
+    assert d["ai_inference"][0]["text"] == "Риск для ВЭД (ОАЭ, Индия)."

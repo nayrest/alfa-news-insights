@@ -61,6 +61,26 @@ _CONSUMER_SECTORS = {"retail_trade", "food", "auto"}
 _TRUE = {"1", "1.0", "y", "yes", "true", "да", "д", "есть", "+"}
 
 
+_PRODUCT_RU = {
+    "rko": "расчётный счёт",
+    "loans": "кредиты",
+    "leasing": "лизинг",
+    "deposits": "депозиты",
+    "guarantees": "банковские гарантии",
+    "salary_project": "зарплатный проект",
+    "factoring": "факторинг",
+}
+
+# Оптовая торговля сырьём по ОКВЭД -> отрасль, от цен которой зависит бизнес
+_WHOLESALE_RAW = {
+    "46.2": ("agriculture", "Оптовая торговля сельхозсырьём: важны урожай, цены на зерно и экспортные правила"),
+    "46.3": ("food", "Оптовая торговля продуктами: важны цены на продовольствие"),
+    "46.71": ("oil_gas", "Оптовая торговля топливом: важны цены на нефть и нефтепродукты"),
+    "46.72": ("mining_metals", "Оптовая торговля металлами и рудами: важны цены на металлы"),
+    "46.75": ("chemicals", "Оптовая торговля химией: важны цены на химическое сырьё"),
+}
+
+
 def flag(value) -> bool:
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return False
@@ -81,6 +101,24 @@ def text(value) -> str | None:
         return None
     s = str(value).strip()
     return s or None
+
+
+def split_countries(value) -> list[str]:
+    """'КИТАЙ,ИНДИЯ' -> ['КИТАЙ', 'ИНДИЯ'] (в данных кейса страны ВЭД перечислены через запятую)."""
+    s = text(value)
+    if not s:
+        return []
+    seen: list[str] = []
+    for part in re.split(r"[,;]", s):
+        c = part.strip().upper()
+        if c and c not in seen:
+            seen.append(c)
+    return seen
+
+
+def country_ru(c: str) -> str:
+    """'ЮЖНАЯ КОРЕЯ' -> 'Южная Корея', аббревиатуры (ОАЭ, США) не трогаем."""
+    return c if len(c) <= 3 else c.title()
 
 
 def okved_to_sector(code: str | None) -> str:
@@ -114,6 +152,7 @@ def counterparty_index(payments: pd.DataFrame | None, sectors: dict[str, str], t
     pay = payments[["PAYER", "BENEFICIARY", "PAY_AMT"]].copy()
     pay["PAYER"] = pay["PAYER"].astype(str)
     pay["BENEFICIARY"] = pay["BENEFICIARY"].astype(str)
+    pay = pay[pay["PAYER"] != pay["BENEFICIARY"]]  # переводы самой себе — не контрагенты
     pairs = pay.groupby(["PAYER", "BENEFICIARY"], as_index=False)["PAY_AMT"].sum()
 
     for side, own_col, other_col in (("suppliers", "PAYER", "BENEFICIARY"), ("buyers", "BENEFICIARY", "PAYER")):
@@ -150,14 +189,14 @@ def build_interests(p: dict) -> list[dict]:
         add("topic:debt_market", 1, "Факторинг/гарантии: важны условия финансирования оборотного капитала")
 
     if p["foreign_trade"]["has_fts"]:
-        country = p["foreign_trade"]["country"]
-        suffix = f" ({country})" if country else ""
+        countries = p["foreign_trade"].get("countries") or []
+        suffix = f" ({', '.join(country_ru(c) for c in countries[:3])})" if countries else ""
         add("topic:fx", 3, f"Компания ведёт ВЭД{suffix}: курс валют влияет на расчёты")
         add("topic:trade_policy", 2, f"Компания ведёт ВЭД{suffix}: важны пошлины и правила импорта/экспорта")
         add("topic:sanctions", 2, "Компания ведёт ВЭД: санкционные изменения могут затронуть расчёты и поставки")
         add("topic:logistics", 1, "Компания ведёт ВЭД: важна логистика")
-        if country:
-            add(f"country:{country.upper()}", 4, f"Страна ВЭД компании — {country}")
+        for c in countries[:6]:
+            add(f"country:{c}", 4, f"Страна ВЭД компании — {country_ru(c)}")
 
     sector = p["sector"]
     if sector != "other":
@@ -166,6 +205,12 @@ def build_interests(p: dict) -> list[dict]:
             add("topic:commodities", 3, "Выручка компании зависит от цен на сырьё")
         if sector in _CONSUMER_SECTORS:
             add("topic:consumer_demand", 2, "Бизнес компании зависит от потребительского спроса")
+    okved = str(p.get("okved_code") or "")
+    for prefix, (raw_sector, reason) in _WHOLESALE_RAW.items():
+        if okved.startswith(prefix):
+            add(f"sector:{raw_sector}", 3, reason)
+            add("topic:commodities", 2, reason)
+            break
 
     if prod["salary_project"] or p.get("workers"):
         add("topic:labor", 1.5, "Расходы на персонал: важны зарплаты и рынок труда")
@@ -261,7 +306,8 @@ def build_profiles(
             },
             "foreign_trade": {
                 "has_fts": flag(row.get("FTS_FLAG")),
-                "country": text(row.get("FTS_COUNTRY_NAME")),
+                "country": text(row.get("FTS_COUNTRY_NAME")),  # как в данных, для совместимости
+                "countries": split_countries(row.get("FTS_COUNTRY_NAME")),
             },
             "group": {
                 "group_id": group_id,
@@ -284,12 +330,18 @@ def build_profiles(
 
 def profile_summary(p: dict) -> str:
     """Короткое текстовое описание профиля для промпта LLM (экономит токены)."""
-    prod = [k for k, v in p["products"].items() if v]
+    prod = [_PRODUCT_RU.get(k, k) for k, v in p["products"].items() if v]
     lines = [
         f"Компания {p['id']}: отрасль — {p['sector_ru']} (ОКВЭД {p['okved_code']} {p['okved_name'] or ''}).",
         f"Регион: {p['region'] or 'н/д'}. Выручка: {p['revenue'] or 'н/д'} ₽, крупный бизнес: {'да' if p['is_large'] else 'нет'}.",
         f"Продукты в банке: {', '.join(prod) or 'нет данных'}.",
-        f"ВЭД: {'да, страна ' + (p['foreign_trade']['country'] or 'н/д') if p['foreign_trade']['has_fts'] else 'нет'}.",
+        "ВЭД: "
+        + (
+            "да, страны " + (", ".join(country_ru(c) for c in p["foreign_trade"].get("countries") or []) or "н/д")
+            if p["foreign_trade"]["has_fts"]
+            else "нет"
+        )
+        + ".",
     ]
     share = p["market"]["share_in_okved_dataset"]
     if share is not None:

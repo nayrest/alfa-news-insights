@@ -4,6 +4,7 @@
 """
 
 import json
+import re
 import time
 import uuid
 
@@ -21,6 +22,29 @@ from app.ranking import score_news
 from app.schemas import ROLES
 
 MAX_REVISIONS = 2
+
+
+_REF_TOKEN = r"(?:[NABFI]\d+|[a-z][a-z_]*(?::[^\],\s]+)?)"
+_INLINE_REFS = re.compile(rf"\s*[\[(]\s*{_REF_TOKEN}(?:\s*[,;]\s*{_REF_TOKEN})*\s*[\])]")
+_TEXT_FIELDS = ("headline", "what_happened", "why_important", "bank_product_hint")
+
+
+def _clean_text(text: str) -> str:
+    """Убирает из текста служебные ссылки вида [N1], [B1, fts], (loans) — их место в based_on."""
+    return _INLINE_REFS.sub("", text).strip() if isinstance(text, str) else text
+
+
+def strip_inline_refs(draft: dict) -> dict:
+    for key in _TEXT_FIELDS:
+        if isinstance(draft.get(key), str):
+            draft[key] = _clean_text(draft[key])
+    for key in ("facts", "bank_view", "ai_inference", "risks", "opportunities", "actions"):
+        for item in draft.get(key) or []:
+            if isinstance(item, dict) and isinstance(item.get("text"), str):
+                item["text"] = _clean_text(item["text"])
+    if isinstance(draft.get("questions_to_check"), list):
+        draft["questions_to_check"] = [_clean_text(q) for q in draft["questions_to_check"]]
+    return draft
 
 
 class Trace:
@@ -133,8 +157,10 @@ def run_agent(session: Session, company: Company, news: News, role: str = "ceo")
             ],
             model=s.llm_model_smart,
             purpose=f"draft:{revision}",
-            max_tokens=1800,
+            max_tokens=s.llm_max_tokens_draft,
         )
+        if isinstance(draft, dict):
+            draft = strip_inline_refs(draft)
         payload, issues = check_payload(draft, source_ids, set(analytics), set(features))
         trace.add("self_check:rules", revision=revision, issues=issues)
 

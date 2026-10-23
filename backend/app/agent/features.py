@@ -1,5 +1,7 @@
 """Признаки клиента в виде ключей, на которые агент обязан ссылаться (трассируемость, критерий 12)."""
 
+from app.companies.profile import country_ru
+
 PRODUCT_RU = {
     "rko": "расчётно-кассовое обслуживание",
     "loans": "кредитные продукты",
@@ -31,8 +33,8 @@ def feature_keys(p: dict) -> dict[str, str]:
     ft = p["foreign_trade"]
     if ft["has_fts"]:
         f["fts"] = "Ведёт внешнеэкономическую деятельность"
-        if ft.get("country"):
-            f[f"fts_country:{ft['country']}"] = f"Страна ВЭД: {ft['country']}"
+        for c in (ft.get("countries") or [])[:6]:
+            f[f"fts_country:{c}"] = f"Страна ВЭД: {country_ru(c)}"
     for side, ru in (("suppliers", "поставщик"), ("buyers", "покупатель")):
         for cp in p["counterparties"][side][:3]:
             f[f"{side[:-1]}:{cp['id']}"] = f"Ключевой {ru} {cp['id']}: {cp['share']:.0%} платежей, отрасль {cp['sector']}"
