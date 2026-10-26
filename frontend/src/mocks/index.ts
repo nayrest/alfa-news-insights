@@ -1,7 +1,8 @@
 // Демо-данные для вёрстки без бэкенда и без ключа LLM.
 // Профили компаний — реальные строки из df_Uid_data_hack.csv (scripts/export_companies.py),
-// названия компаний вымышленные. Тексты инсайтов — заглушки, их заменит ответ агента.
+// названия условные (src/config/companies.ts). Тексты инсайтов — заглушки, их заменит ответ агента.
 import companiesJson from './companies.json';
+import { companyDisplay } from '../config/companies';
 import type {
   ChatMessage,
   Company,
@@ -23,7 +24,10 @@ const SECTOR_BY_ID: Record<string, string> = {
   U_4909: 'энергетика',
 };
 
-export const mockCompanies: Company[] = companiesJson.map((c) => ({ ...c, sector: SECTOR_BY_ID[c.id] ?? 'прочее' }));
+export const mockCompanies: Company[] = companiesJson.map((c, i) => {
+  const sector = SECTOR_BY_ID[c.id] ?? 'прочее';
+  return { ...c, sector, ...companyDisplay(c.id, sector, i) };
+});
 
 // Совпадает с backend/app/schemas.py::ROLES
 export const mockRoles: Role[] = [

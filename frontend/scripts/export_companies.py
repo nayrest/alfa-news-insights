@@ -9,13 +9,8 @@ import sys
 import pandas as pd
 
 # Клиенты для демо: разные отрасли, с кредитами и без, с ВЭД и без.
-SELECTED = {
-    "U_34911": {"name": "ООО «Южный зерновой терминал»", "short": "ЮЗТ", "color": "#F5C451"},
-    "U_9250": {"name": "АО «Байкалинжстрой»", "short": "БИС", "color": "#7AC4FF"},
-    "U_200890": {"name": "ООО «Уралметторг»", "short": "УМТ", "color": "#B9C2CC"},
-    "U_102920": {"name": "ООО «Балтфуд Трейд»", "short": "БФТ", "color": "#9BE15D"},
-    "U_4909": {"name": "АО «Столичная генерация»", "short": "СГ", "color": "#FF8A65"},
-}
+# Условные названия задаются во фронтенде (src/config/companies.ts), здесь только данные из CSV.
+SELECTED = ["U_34911", "U_9250", "U_200890", "U_102920", "U_4909"]
 
 PRODUCTS = {
     "CL_PRODUCT_RKO_MARK": "РКО",
@@ -43,16 +38,12 @@ def main(csv_path, out_path):
     df = pd.read_csv(csv_path, sep=";", low_memory=False)
     groups = df.groupby("GROUP_ID")
     result = []
-    for uid, meta in SELECTED.items():
+    for uid in SELECTED:
         row = df[df.SYNTHETIC_U == uid].iloc[0]
         group = groups.get_group(row.GROUP_ID)
         countries = none_if_nan(row.FTS_COUNTRY_NAME)
         result.append({
             "id": uid,
-            # Названия вымышленные: в датасете компании обезличены.
-            "name": meta["name"],
-            "short": meta["short"],
-            "color": meta["color"],
             "okved_code": str(row.MAINOKVED_CODE),
             "okved_name": row.MAINOKVED_NAME,
             "revenue": float(row.REVENUE_COMPANY),

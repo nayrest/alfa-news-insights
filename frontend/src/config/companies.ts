@@ -1,14 +1,16 @@
 // Какие компании показывать в переключателе и как их называть.
-// В датасете компании обезличены, поэтому названия вымышленные — только для демо.
+// В датасете компании обезличены, поэтому названия явно условные — «Клиент А · …»,
+// чтобы их нельзя было спутать с реальными фирмами.
 
 const DISPLAY: Record<string, { name: string; short: string; color: string }> = {
-  U_34911: { name: 'ООО «Южный зерновой терминал»', short: 'ЮЗТ', color: '#F5C451' },
-  U_9250: { name: 'АО «Байкалинжстрой»', short: 'БИС', color: '#7AC4FF' },
-  U_200890: { name: 'ООО «Уралметторг»', short: 'УМТ', color: '#B9C2CC' },
-  U_102920: { name: 'ООО «Балтфуд Трейд»', short: 'БФТ', color: '#9BE15D' },
-  U_4909: { name: 'АО «Столичная генерация»', short: 'СГ', color: '#FF8A65' },
+  U_34911: { name: 'Клиент А · зерновой трейдер', short: 'А', color: '#F5C451' },
+  U_9250: { name: 'Клиент Б · инфраструктурное строительство', short: 'Б', color: '#7AC4FF' },
+  U_200890: { name: 'Клиент В · металлотрейдер', short: 'В', color: '#B9C2CC' },
+  U_102920: { name: 'Клиент Г · импортёр продуктов', short: 'Г', color: '#9BE15D' },
+  U_4909: { name: 'Клиент Д · тепловая генерация', short: 'Д', color: '#FF8A65' },
 };
 
+const LETTERS = 'АБВГДЕЖЗИКЛМНОПРСТУФ';
 const PALETTE = ['#F5C451', '#7AC4FF', '#B9C2CC', '#9BE15D', '#FF8A65', '#C8A2FF'];
 
 /** Демо-клиенты: разные отрасли, с кредитами и без, с ВЭД и без (см. КЛИЕНТЫ_ДЛЯ_ДЕМО). */
@@ -21,15 +23,11 @@ export const MAX_COMPANIES = 5;
 
 export function companyDisplay(id: string, sector: string, index: number) {
   if (DISPLAY[id]) return DISPLAY[id];
-  const short = sector
-    .split(/\s+/)
-    .filter((w) => w.length > 2)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join('');
-  return {
-    name: `Компания ${id} · ${sector}`,
-    short: short || id.slice(-2),
-    color: PALETTE[index % PALETTE.length],
-  };
+  const letter = LETTERS[index % LETTERS.length];
+  return { name: `Клиент ${letter} · ${sector}`, short: letter, color: PALETTE[index % PALETTE.length] };
+}
+
+/** Условное имя для ID из платежей/связей: свой демо-клиент или просто ID. */
+export function knownCompanyName(id: string): string | null {
+  return DISPLAY[id]?.name ?? null;
 }
