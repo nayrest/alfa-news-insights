@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, USE_MOCKS } from '../api/client';
+import { api } from '../api/client';
 import type { FeedItem, Insight, InsightKind } from '../api/types';
 import { AgentProgress } from '../components/AgentProgress';
 import { CompanyProfile } from '../components/CompanyProfile';
@@ -77,7 +77,6 @@ export function InsightsPage() {
           <p className="muted">События, отобранные и интерпретированные для вашей компании с учётом аналитики Альфа-Банка</p>
         </div>
         <div className="page-head__tools">
-          {USE_MOCKS && <span className="demo-badge" title="Фронтенд работает на тестовых данных, без бэкенда">Демо-данные</span>}
           {roles.length > 0 && (
             <label className="role-select" title={roleInfo?.description}>
               <span>Ваша роль</span>

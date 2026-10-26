@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { CompanySwitcher } from './CompanySwitcher';
+import { DemoBanner } from './DemoBadge';
 import { ErrorBoundary } from './ErrorBoundary';
 import {
   IconBell, IconCard, IconClock, IconDoc, IconGov, IconGrid, IconInbox, IconList, IconMail, IconPlus,
@@ -56,6 +57,7 @@ export function Layout() {
       </aside>
 
       <main className="content">
+        <DemoBanner />
         <ErrorBoundary key={location.pathname.split('/')[1]}>
           <Outlet />
         </ErrorBoundary>

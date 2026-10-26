@@ -23,7 +23,8 @@ export interface ApiProfile {
     companies_in_okved_dataset: number;
   };
   products: Record<'rko' | 'loans' | 'leasing' | 'deposits' | 'guarantees' | 'salary_project' | 'factoring', boolean>;
-  foreign_trade: { has_fts: boolean; country: string | null };
+  // countries — список стран ВЭД (появился в бэкенде позже, country оставлен для совместимости)
+  foreign_trade: { has_fts: boolean; country: string | null; countries?: string[] };
   group: { group_id: string | null; group_size: number };
   workers: string | null;
   client_type: string | null;
@@ -31,6 +32,7 @@ export interface ApiProfile {
   eco_stage: string | null;
   negative_mark: boolean;
   ownership: string | null;
+  linked_companies_via_persons?: string[];
   counterparties: {
     suppliers: { id: string; share: number; sector: string }[];
     buyers: { id: string; share: number; sector: string }[];

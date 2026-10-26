@@ -34,14 +34,44 @@ export const TOPIC_LABELS: Record<string, string> = {
   gdp_macro: 'Макроэкономика',
 };
 
+// Ключи отраслей совпадают с backend/app/companies/profile.py::SECTOR_NAMES_RU
+const SECTOR_RU: Record<string, string> = {
+  agriculture: 'сельское хозяйство',
+  oil_gas: 'нефть и газ',
+  mining_metals: 'добыча и металлургия',
+  food: 'пищевая промышленность',
+  chemicals: 'химия',
+  manufacturing: 'обрабатывающая промышленность',
+  auto: 'автомобильная отрасль',
+  energy: 'энергетика',
+  construction: 'строительство',
+  retail_trade: 'торговля',
+  transport_logistics: 'транспорт и логистика',
+  it_telecom: 'ИТ и связь',
+  finance: 'финансы',
+  real_estate: 'недвижимость',
+  other: 'прочее',
+  // контрагента нет среди компаний датасета — отрасль определить не по чему
+  unknown: 'нет в данных кейса',
+};
+
+/** 'ЮЖНАЯ КОРЕЯ' -> 'Южная Корея', аббревиатуры (ОАЭ, США) не трогаем. */
 function countryLabel(raw: string): string {
   const s = raw.trim();
-  return s.length <= 3 ? s : s.charAt(0) + s.slice(1).toLowerCase();
+  if (s.length <= 3) return s;
+  return s.toLowerCase().replace(/(^|[\s-])\S/g, (m) => m.toUpperCase());
 }
+
+function countriesOf(ft: ApiProfile['foreign_trade']): string[] {
+  const list = ft.countries ?? (ft.country ? ft.country.split(/[,;]/) : []);
+  return [...new Set(list.map(countryLabel).filter(Boolean))];
+}
+
+const toCounterparties = (list: ApiProfile['counterparties']['suppliers']) =>
+  list.map((c) => ({ ...c, sector: SECTOR_RU[c.sector] ?? c.sector }));
 
 export function toCompany(p: ApiProfile, index: number): Company {
   const display = companyDisplay(p.id, p.sector_ru, index);
-  const country = p.foreign_trade.country;
   return {
     id: p.id,
     ...display,
@@ -55,7 +85,7 @@ export function toCompany(p: ApiProfile, index: number): Company {
       .map((k) => PRODUCT_LABELS[k]),
     has_loans: p.products.loans,
     fts_flag: p.foreign_trade.has_fts,
-    fts_countries: country ? country.split(',').map(countryLabel) : [],
+    fts_countries: countriesOf(p.foreign_trade),
     negative_mark: p.negative_mark,
     eco_stage: p.eco_stage,
     age: p.company_age,
@@ -69,7 +99,11 @@ export function toCompany(p: ApiProfile, index: number): Company {
       rank: p.market.rank_in_okved_dataset,
       total: p.market.companies_in_okved_dataset,
     },
-    counterparties: p.counterparties,
+    counterparties: {
+      suppliers: toCounterparties(p.counterparties.suppliers),
+      buyers: toCounterparties(p.counterparties.buyers),
+    },
+    linked_companies: p.linked_companies_via_persons ?? [],
   };
 }
 
