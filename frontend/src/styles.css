@@ -408,3 +408,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 10px 12px; }
 .agent-progress__steps li.active .agent-progress__dot { background: var(--ai); color: #fff; animation: blink 1.2s infinite; }
 .agent-progress__steps li.done .agent-progress__dot { background: var(--opp); color: #fff; }
 .agent-progress__note { margin-top: 14px; font-size: 12px; }
+
+/* ---------- Демо-режим ---------- */
+.demo-banner { background: #fff6dc; color: #6b4b00; border: 1px solid #f3dd9b; border-radius: 12px; padding: 10px 16px; margin: 0 0 16px; font-size: 13px; line-height: 1.45; }
+.demo-banner code { background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 4px; }
+.card__title .demo-badge, .detail__meta .demo-badge { font-size: 10px; padding: 3px 7px; text-transform: uppercase; letter-spacing: .02em; }
+

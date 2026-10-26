@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Insight, Statement } from '../api/types';
 import { formatDate } from '../utils/format';
 import { AskPanel } from './AskPanel';
+import { DemoBadge } from './DemoBadge';
 import { IconBank, IconChat, IconDoc, IconLink, IconRoute, IconSpark } from './Icons';
 import { KindBadge, RelevanceMeter } from './KindBadge';
 import { TraceDrawer } from './TraceDrawer';
@@ -60,6 +61,7 @@ export function InsightDetail({ insight, onRetry }: { insight: Insight; onRetry:
     <article className="detail">
       <header className="detail__head">
         <div className="detail__meta">
+          <DemoBadge />
           <KindBadge kind={insight.kind} />
           <span className="tag">{insight.category}</span>
           {insight.horizon && <span className="tag">Горизонт: {insight.horizon}</span>}

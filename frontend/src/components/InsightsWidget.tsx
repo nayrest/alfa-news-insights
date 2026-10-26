@@ -5,6 +5,7 @@ import type { FeedItem } from '../api/types';
 import { useCompany } from '../state/CompanyContext';
 import { formatShortDate } from '../utils/format';
 import { IconChevron, IconSpark } from './Icons';
+import { DemoBadge } from './DemoBadge';
 import { KindBadge } from './KindBadge';
 
 export function InsightsWidget() {
@@ -29,6 +30,7 @@ export function InsightsWidget() {
           <span className="insights-widget__icon"><IconSpark width={18} height={18} /></span>
           Инсайты для вашего бизнеса
           <span className="badge-new">НОВОЕ</span>
+          <DemoBadge />
         </Link>
         <Link to="/insights" aria-label="Открыть все инсайты"><IconChevron /></Link>
       </header>
