@@ -1,6 +1,7 @@
 // Модель данных интерфейса. Ответы бэкенда приводятся к ней в api/adapter.ts,
 // поэтому компоненты не зависят от формата API.
 
+/** Контрагент из платежей кейса: доля в платежах компании и отрасль (по-русски). */
 export interface Counterparty {
   id: string;
   share: number;
@@ -31,6 +32,8 @@ export interface Company {
   group: { id: string | null; size: number; revenue?: number; top_okved?: string[] };
   market?: { share: number | null; rank: number | null; total: number };
   counterparties?: { suppliers: Counterparty[]; buyers: Counterparty[] };
+  /** Компании, связанные через общих физлиц */
+  linked_companies?: string[];
 }
 
 export interface Role {
