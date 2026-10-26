@@ -33,8 +33,16 @@ def save(session: Session, items: list[RawNews]) -> dict:
     recent = list(session.scalars(select(News).where(News.fetched_at >= since)))
     by_key = {n.dedup_key: n for n in recent}
 
+    groups = group_duplicates(items)
+    # Точный дубль ищем по всей таблице: ленты вроде ЦБ отдают старые записи,
+    # которые уже сохранены раньше окна в 3 дня (иначе — UniqueViolation и пустая лента)
+    keys = {main.dedup_key for main, _ in groups} - by_key.keys()
+    if keys:
+        for n in session.scalars(select(News).where(News.dedup_key.in_(keys))):
+            by_key[n.dedup_key] = n
+
     added = merged = 0
-    for main, dups in group_duplicates(items):
+    for main, dups in groups:
         existing = by_key.get(main.dedup_key) or next(
             (n for n in recent if jaccard(n.title, main.title) >= 0.6), None
         )
